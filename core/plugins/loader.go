@@ -16,6 +16,7 @@ type Manifest struct {
 	Description string            `json:"description"`
 	Entry       string            `json:"entry"`
 	Parameters  map[string]string `json:"parameters"`
+	Permissions []string          `json:"permissions"`
 }
 
 // Definition represents a discovered plugin.
@@ -32,6 +33,7 @@ type InstalledPlugin struct {
 	Description string            `json:"description"`
 	Entry       string            `json:"entry"`
 	Parameters  map[string]string `json:"parameters"`
+	Permissions []string          `json:"permissions"`
 	Status      string            `json:"status"`
 	Dir         string            `json:"dir"`
 }
@@ -116,6 +118,7 @@ func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
 			Description: manifest.Description,
 			Entry:       manifest.Entry,
 			Parameters:  manifest.Parameters,
+			Permissions: manifest.Permissions,
 			Status:      status,
 			Dir:         pluginDir,
 		})

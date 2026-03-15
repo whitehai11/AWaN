@@ -20,6 +20,18 @@ import (
 
 const defaultPluginTimeout = 30 * time.Second
 
+var pathArgumentKeys = []string{
+	"path",
+	"file",
+	"filepath",
+	"source",
+	"source_path",
+	"target",
+	"target_path",
+	"destination",
+	"destination_path",
+}
+
 // ExecuteRequest is sent to a plugin over stdin.
 type ExecuteRequest struct {
 	Plugin string         `json:"plugin"`
@@ -59,6 +71,7 @@ func NewRunner(fs *filesystem.AgentFS) (*Runner, error) {
 				"language": "string",
 				"code":     "string",
 			},
+			Permissions: []string{"code.execute"},
 			Entry: "builtin:code.execute",
 		},
 		Dir:   fs.Paths().Sandbox,
@@ -92,7 +105,11 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		return nil, fmt.Errorf("plugin %q is not permitted for this agent", pluginName)
 	}
 
-	if err := validatePluginArgs(args, r.fs.Paths().Files); err != nil {
+	if err := validatePluginPermissions(definition.Manifest, allowedPlugins); err != nil {
+		return nil, err
+	}
+
+	if err := validatePluginArgs(args, r.fs.Paths().Root, r.fs.Paths().Files, r.fs.Paths().Memory); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +138,9 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 	}
 	command.Dir = definition.Dir
 	command.Env = append(os.Environ(),
+		"AWAN_ROOT="+r.fs.Paths().Root,
 		"AWAN_FILES_ROOT="+r.fs.Paths().Files,
+		"AWAN_MEMORY_ROOT="+r.fs.Paths().Memory,
 		"AWAN_PLUGIN_ROOT="+definition.Dir,
 		"AWAN_PLUGIN_SANDBOX=1",
 	)
@@ -205,9 +224,41 @@ func isPluginAllowed(allowedPlugins []string, pluginName string) bool {
 	return ok && slices.Contains(allowedPlugins, prefix)
 }
 
-func validatePluginArgs(args map[string]any, filesRoot string) error {
+func validatePluginPermissions(manifest Manifest, allowedPlugins []string) error {
+	for _, permission := range manifest.Permissions {
+		permission = strings.TrimSpace(permission)
+		if permission == "" {
+			continue
+		}
+		if !isPluginAllowed(allowedPlugins, permission) {
+			return fmt.Errorf("plugin %q requires permission %q, which is not granted to this agent", manifest.Name, permission)
+		}
+	}
+	return nil
+}
+
+func validatePluginArgs(args map[string]any, root, filesRoot, memoryRoot string) error {
 	for key, value := range args {
-		if !strings.EqualFold(key, "path") {
+		switch typed := value.(type) {
+		case map[string]any:
+			if err := validatePluginArgs(typed, root, filesRoot, memoryRoot); err != nil {
+				return err
+			}
+			continue
+		case []any:
+			for _, item := range typed {
+				nested, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if err := validatePluginArgs(nested, root, filesRoot, memoryRoot); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		if !isPathArgument(key) {
 			continue
 		}
 
@@ -216,20 +267,67 @@ func validatePluginArgs(args map[string]any, filesRoot string) error {
 			return errors.New("plugin path arguments must be strings")
 		}
 
-		cleaned := filepath.Clean(pathValue)
-		if filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, "..") {
-			return errors.New("plugin path escapes the agent filesystem")
-		}
-
-		resolved := filepath.Join(filesRoot, cleaned)
-		relative, err := filepath.Rel(filesRoot, resolved)
-		if err != nil {
+		if _, err := resolveAllowedPath(pathValue, root, filesRoot, memoryRoot); err != nil {
 			return err
-		}
-		if strings.HasPrefix(relative, "..") {
-			return errors.New("plugin path escapes the agent filesystem")
 		}
 	}
 
 	return nil
+}
+
+func isPathArgument(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, candidate := range pathArgumentKeys {
+		if normalized == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveAllowedPath(pathValue, root, filesRoot, memoryRoot string) (string, error) {
+	cleaned := filepath.Clean(strings.TrimSpace(pathValue))
+	if cleaned == "." || cleaned == "" {
+		return "", errors.New("plugin path cannot be empty")
+	}
+	if filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, "..") {
+		return "", errors.New("plugin path escapes the AWaN sandbox")
+	}
+
+	lowered := filepath.ToSlash(cleaned)
+	targetRoot := filesRoot
+	trimmed := cleaned
+	switch {
+	case lowered == "files":
+		targetRoot = filesRoot
+		trimmed = "."
+	case strings.HasPrefix(lowered, "files/"):
+		targetRoot = filesRoot
+		trimmed = strings.TrimPrefix(lowered, "files/")
+	case lowered == "memory":
+		targetRoot = memoryRoot
+		trimmed = "."
+	case strings.HasPrefix(lowered, "memory/"):
+		targetRoot = memoryRoot
+		trimmed = strings.TrimPrefix(lowered, "memory/")
+	}
+
+	resolved := filepath.Join(targetRoot, filepath.Clean(trimmed))
+	relative, err := filepath.Rel(targetRoot, resolved)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(relative, "..") {
+		return "", errors.New("plugin path escapes the AWaN sandbox")
+	}
+
+	rootRelative, err := filepath.Rel(root, resolved)
+		if err != nil {
+			return "", err
+		}
+	if strings.HasPrefix(rootRelative, "..") {
+		return "", errors.New("plugin path escapes the AWaN sandbox")
+	}
+
+	return resolved, nil
 }
