@@ -1,0 +1,5 @@
+name = research-agent
+model = openai
+memory = true
+tools = browser,filesystem.read,code.execute
+description = research information

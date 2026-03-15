@@ -1,0 +1,3 @@
+agent_name = research-agent
+model = openai
+memory = enabled

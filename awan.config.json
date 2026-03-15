@@ -1,0 +1,22 @@
+{
+  "defaultModel": "openai",
+  "defaultAgent": "default",
+  "api": {
+    "host": "localhost",
+    "port": 7452
+  },
+  "storage": {
+    "rootPath": ""
+  },
+  "openai": {
+    "model": "gpt-4o-mini",
+    "baseURL": "https://api.openai.com"
+  },
+  "ollama": {
+    "baseURL": "http://localhost:11434",
+    "model": "llama3"
+  },
+  "auth": {
+    "storagePath": ""
+  }
+}
