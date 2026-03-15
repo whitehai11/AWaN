@@ -359,6 +359,40 @@ Example:
 auto_update = false
 ```
 
+## GitHub Releases
+
+AWaN Core includes an automated GitHub Actions release pipeline in [build-release.yml](C:\Users\maro\Desktop\AWaN\.github\workflows\build-release.yml).
+
+When code is pushed to `main`, GitHub Actions will:
+
+- build a Windows executable
+- build a Linux binary
+- place both files in `dist/`
+- create a GitHub Release named `Build <run_number>`
+- publish the binaries as release assets using the tag `auto-<run_number>`
+
+To trigger an automatic release, push or merge a commit into the `main` branch.
+
+If you want to switch from push-based auto releases to tag-based versioning later, change the workflow trigger from:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+```
+
+to something like:
+
+```yaml
+on:
+  push:
+    tags:
+      - "v*"
+```
+
+Then replace the generated release tag and name with the pushed git tag, for example `${{ github.ref_name }}`.
+
 ## Current Scope
 
 Implemented here:
