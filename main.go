@@ -125,14 +125,14 @@ func runPluginCommand(rt *runtime.Runtime, args []string) error {
 		return nil
 	case "install":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			return fmt.Errorf("usage: awan plugin install <name>")
+			return fmt.Errorf("usage: awan plugin install <name|github-url>")
 		}
 
-		result, err := rt.InstallRegistryPlugin(args[1])
+		result, err := rt.InstallPlugin(args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("installed %s to %s\n", result.Name, result.Path)
+		fmt.Printf("installed %s (%s) to %s\n", result.Name, result.Type, result.Path)
 		return nil
 	case "remove":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {

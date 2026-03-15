@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/whitehai11/AWaN/core/filesystem"
-	"github.com/whitehai11/AWaN/core/tools"
 	"github.com/whitehai11/AWaN/core/utils"
 )
 
@@ -31,12 +30,6 @@ var pathArgumentKeys = []string{
 	"destination_path",
 }
 
-// ExecuteRequest is sent to a plugin over stdin.
-type ExecuteRequest struct {
-	Plugin string         `json:"plugin"`
-	Args   map[string]any `json:"args"`
-}
-
 // ExecuteResponse is returned by a plugin over stdout.
 type ExecuteResponse struct {
 	Result any `json:"result"`
@@ -44,49 +37,26 @@ type ExecuteResponse struct {
 
 // Runner loads, validates, and executes external plugins.
 type Runner struct {
-	fs         *filesystem.AgentFS
-	plugins    map[string]Definition
-	codeRunner *tools.CodeRunner
-	logger     *utils.Logger
+	fs      *filesystem.AgentFS
+	plugins map[string]Definition
+	logger  *utils.Logger
 }
 
-// NewRunner loads plugins from ~/.awan/plugins and registers built-in helpers.
+// NewRunner loads plugins from ~/.awan/plugins.
 func NewRunner(fs *filesystem.AgentFS, logger *utils.Logger) (*Runner, error) {
 	pluginMap, err := LoadPlugins(fs.Paths().Plugins)
 	if err != nil {
 		return nil, err
 	}
 
-	codeRunner, err := tools.NewCodeRunner(fs.Paths().Sandbox)
-	if err != nil {
-		return nil, err
-	}
-
-	pluginMap["code.execute"] = Definition{
-		Manifest: Manifest{
-			Name:        "code.execute",
-			Version:     "builtin",
-			Description: "Execute generated code inside the AWaN sandbox",
-			Parameters: map[string]string{
-				"language": "string",
-				"code":     "string",
-			},
-			Permissions: []string{"code.execute"},
-			Entry: "builtin:code.execute",
-		},
-		Dir:   fs.Paths().Sandbox,
-		Entry: "builtin:code.execute",
-	}
-
 	return &Runner{
-		fs:         fs,
-		plugins:    pluginMap,
-		codeRunner: codeRunner,
-		logger:     logger,
+		fs:      fs,
+		plugins: pluginMap,
+		logger:  logger,
 	}, nil
 }
 
-// RegisteredPlugins returns a copy of the loaded plugin definitions.
+// RegisteredPlugins returns a copy of the loaded tool-to-plugin definitions.
 func (r *Runner) RegisteredPlugins() map[string]Definition {
 	result := make(map[string]Definition, len(r.plugins))
 	for name, definition := range r.plugins {
@@ -95,15 +65,15 @@ func (r *Runner) RegisteredPlugins() map[string]Definition {
 	return result
 }
 
-// Execute runs a permitted plugin as an isolated process.
-func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginName string, args map[string]any) (*ExecuteResponse, error) {
-	definition, ok := r.plugins[pluginName]
+// Execute runs a permitted external plugin process via APP/1.0.
+func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, toolName string, args map[string]any) (*ExecuteResponse, error) {
+	definition, ok := r.plugins[toolName]
 	if !ok {
-		return nil, fmt.Errorf("plugin %q is not registered", pluginName)
+		return nil, fmt.Errorf("plugin tool %q is not registered", toolName)
 	}
 
-	if !isPluginAllowed(allowedPlugins, pluginName) {
-		return nil, fmt.Errorf("plugin %q is not permitted for this agent", pluginName)
+	if !isPluginAllowed(allowedPlugins, toolName) && !isPluginAllowed(allowedPlugins, definition.Manifest.Name) {
+		return nil, fmt.Errorf("plugin tool %q is not permitted for this agent", toolName)
 	}
 
 	if err := validatePluginPermissions(definition.Manifest, allowedPlugins); err != nil {
@@ -118,19 +88,6 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(context.Background(), defaultPluginTimeout)
 		defer cancel()
-	}
-
-	if definition.Entry == "builtin:code.execute" {
-		language, _ := args["language"].(string)
-		code, _ := args["code"].(string)
-		result, err := r.codeRunner.Execute(ctx, tools.CodeExecutionRequest{
-			Language: language,
-			Code:     code,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &ExecuteResponse{Result: result}, nil
 	}
 
 	command, err := prepareCommand(ctx, definition)
@@ -163,16 +120,16 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		return nil, err
 	}
 
-	client := newProtocolClient(pluginName, stdin, stdout, r.logger)
+	client := newProtocolClient(definition.Manifest.Name, stdin, stdout, r.logger)
 	defer func() { _ = client.Close() }()
 
-	if err := client.Handshake(ctx, pluginName); err != nil {
+	if err := client.Handshake(ctx, toolName); err != nil {
 		_ = command.Process.Kill()
 		_ = command.Wait()
 		return nil, err
 	}
 
-	response, callErr := client.CallTool(ctx, "req-1", pluginName, args)
+	response, callErr := client.CallTool(ctx, "req-1", toolName, args)
 	_ = client.Close()
 
 	if err := command.Wait(); err != nil {
@@ -180,7 +137,7 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		if message == "" {
 			message = err.Error()
 		}
-		return nil, fmt.Errorf("plugin %q failed: %s", pluginName, message)
+		return nil, fmt.Errorf("plugin %q failed: %s", definition.Manifest.Name, message)
 	}
 
 	if callErr != nil {
@@ -225,7 +182,12 @@ func isPluginAllowed(allowedPlugins []string, pluginName string) bool {
 }
 
 func validatePluginPermissions(manifest Manifest, allowedPlugins []string) error {
-	for _, permission := range manifest.Permissions {
+	required := manifest.Permissions
+	if len(required) == 0 {
+		required = manifest.Tools
+	}
+
+	for _, permission := range required {
 		permission = strings.TrimSpace(permission)
 		if permission == "" {
 			continue
@@ -322,9 +284,9 @@ func resolveAllowedPath(pathValue, root, filesRoot, memoryRoot string) (string, 
 	}
 
 	rootRelative, err := filepath.Rel(root, resolved)
-		if err != nil {
-			return "", err
-		}
+	if err != nil {
+		return "", err
+	}
 	if strings.HasPrefix(rootRelative, "..") {
 		return "", errors.New("plugin path escapes the AWaN sandbox")
 	}

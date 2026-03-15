@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"io"
 	"net/http"
 	"os"
@@ -28,6 +29,11 @@ type RegistryPlugin struct {
 	Version     string `json:"version"`
 }
 
+// CustomPluginRequest installs a plugin directly from a GitHub repository URL.
+type CustomPluginRequest struct {
+	Repo string `json:"repo"`
+}
+
 // RegistryIndex is the public registry payload.
 type RegistryIndex struct {
 	Plugins []RegistryPlugin `json:"plugins"`
@@ -39,6 +45,7 @@ type InstallResult struct {
 	Version string `json:"version"`
 	Path    string `json:"path"`
 	Source  string `json:"source"`
+	Type    string `json:"type"`
 }
 
 // RemoveResult summarizes a removed plugin.
@@ -183,7 +190,7 @@ func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
 			Name:        definition.Name,
 			Description: definition.Description,
 			Version:     definition.Version,
-			Repo:        "",
+			Repo:        definition.Repo,
 		})
 	}
 
@@ -321,11 +328,79 @@ func (r *Registry) installEntry(ctx context.Context, entry RegistryPlugin) (*Ins
 		return nil, err
 	}
 
+	if err := writeInstallMetadata(targetDir, installMetadata{
+		SourceType: "official",
+		Repo:       strings.TrimSpace(entry.Repo),
+	}); err != nil {
+		return nil, err
+	}
+
 	return &InstallResult{
 		Name:    entry.Name,
 		Version: entry.Version,
 		Path:    targetDir,
 		Source:  sourceURL,
+		Type:    "official",
+	}, nil
+}
+
+// InstallCustomPlugin downloads and installs a plugin directly from a GitHub URL.
+func (r *Registry) InstallCustomPlugin(ctx context.Context, repoURL string) (*InstallResult, error) {
+	repoURL = normalizeGitHubRepo(repoURL)
+	if repoURL == "" {
+		return nil, errors.New("custom plugin repository URL is required")
+	}
+
+	tempDir, err := os.MkdirTemp("", "awan-plugin-custom-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tempDir)
+
+	var archivePath string
+	var sourceURL string
+	for _, candidate := range archiveCandidates(RegistryPlugin{Repo: repoURL}) {
+		archivePath, err = r.downloadFile(ctx, candidate, tempDir)
+		if err == nil {
+			sourceURL = candidate
+			break
+		}
+	}
+	if archivePath == "" {
+		return nil, fmt.Errorf("failed to download plugin from %s", repoURL)
+	}
+
+	extractRoot := filepath.Join(tempDir, "extract")
+	if err := os.MkdirAll(extractRoot, 0o700); err != nil {
+		return nil, err
+	}
+	if err := extractArchive(archivePath, extractRoot); err != nil {
+		return nil, err
+	}
+
+	pluginSourceDir, manifest, err := findAnyPluginDirectory(extractRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	targetDir := filepath.Join(r.fs.Paths().Plugins, pluginDirName(manifest.Name))
+	_ = os.RemoveAll(targetDir)
+	if err := copyDir(pluginSourceDir, targetDir); err != nil {
+		return nil, err
+	}
+	if err := writeInstallMetadata(targetDir, installMetadata{
+		SourceType: "custom",
+		Repo:       repoURL,
+	}); err != nil {
+		return nil, err
+	}
+
+	return &InstallResult{
+		Name:    manifest.Name,
+		Version: manifest.Version,
+		Path:    targetDir,
+		Source:  sourceURL,
+		Type:    "custom",
 	}, nil
 }
 
@@ -549,6 +624,44 @@ func findPluginDirectory(root, expectedName string) (string, error) {
 	return matches[0], nil
 }
 
+func findAnyPluginDirectory(root string) (string, Manifest, error) {
+	var selectedPath string
+	var selectedManifest Manifest
+
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.EqualFold(entry.Name(), "plugin.json") {
+			return nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var manifest Manifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return err
+		}
+		if strings.TrimSpace(manifest.Name) == "" {
+			return nil
+		}
+
+		selectedPath = filepath.Dir(path)
+		selectedManifest = manifest
+		return io.EOF
+	})
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", Manifest{}, err
+	}
+	if selectedPath == "" {
+		return "", Manifest{}, errors.New("no plugin.json found in custom repository")
+	}
+	return selectedPath, selectedManifest, nil
+}
+
 func copyDir(source, destination string) error {
 	return filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -597,4 +710,26 @@ func pluginDirName(name string) string {
 		return prefix
 	}
 	return strings.TrimSpace(name)
+}
+
+func writeInstallMetadata(pluginDir string, metadata installMetadata) error {
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(pluginDir, ".awan-plugin.json"), data, 0o600)
+}
+
+func normalizeGitHubRepo(repo string) string {
+	repo = strings.TrimSpace(strings.TrimRight(repo, "/"))
+	if repo == "" {
+		return ""
+	}
+	if strings.HasPrefix(repo, "http://") || strings.HasPrefix(repo, "https://") {
+		return strings.TrimSuffix(repo, ".git")
+	}
+	if strings.Count(repo, "/") == 1 {
+		return "https://github.com/" + strings.TrimSuffix(repo, ".git")
+	}
+	return repo
 }

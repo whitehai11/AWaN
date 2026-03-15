@@ -15,6 +15,7 @@ type Manifest struct {
 	Version     string            `json:"version"`
 	Description string            `json:"description"`
 	Entry       string            `json:"entry"`
+	Tools       []string          `json:"tools"`
 	Parameters  map[string]string `json:"parameters"`
 	Permissions []string          `json:"permissions"`
 }
@@ -24,6 +25,7 @@ type Definition struct {
 	Manifest Manifest
 	Dir      string
 	Entry    string
+	Tool     string
 }
 
 // InstalledPlugin describes a plugin present on disk, including status.
@@ -32,10 +34,13 @@ type InstalledPlugin struct {
 	Version     string            `json:"version"`
 	Description string            `json:"description"`
 	Entry       string            `json:"entry"`
+	Tools       []string          `json:"tools"`
 	Parameters  map[string]string `json:"parameters"`
 	Permissions []string          `json:"permissions"`
 	Status      string            `json:"status"`
 	Dir         string            `json:"dir"`
+	SourceType  string            `json:"sourceType"`
+	Repo        string            `json:"repo"`
 }
 
 // LoadPlugins scans plugin directories and loads their manifests.
@@ -57,7 +62,19 @@ func LoadPlugins(root string) (map[string]Definition, error) {
 			return nil, err
 		}
 
-		plugins[definition.Manifest.Name] = definition
+		tools := definition.Manifest.Tools
+		if len(tools) == 0 {
+			tools = []string{definition.Manifest.Name}
+		}
+		for _, tool := range tools {
+			tool = strings.TrimSpace(tool)
+			if tool == "" {
+				continue
+			}
+			copyDefinition := definition
+			copyDefinition.Tool = tool
+			plugins[tool] = copyDefinition
+		}
 	}
 
 	return plugins, nil
@@ -111,16 +128,20 @@ func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
 			}
 			return nil, err
 		}
+		metadata := readInstallMetadata(pluginDir)
 
 		result = append(result, InstalledPlugin{
 			Name:        manifest.Name,
 			Version:     manifest.Version,
 			Description: manifest.Description,
 			Entry:       manifest.Entry,
+			Tools:       manifest.Tools,
 			Parameters:  manifest.Parameters,
 			Permissions: manifest.Permissions,
 			Status:      status,
 			Dir:         pluginDir,
+			SourceType:  metadata.SourceType,
+			Repo:        metadata.Repo,
 		})
 	}
 
@@ -152,6 +173,24 @@ func readInstalledManifest(pluginDir string) (Manifest, string, error) {
 	}
 
 	return Manifest{}, "", os.ErrNotExist
+}
+
+type installMetadata struct {
+	SourceType string `json:"sourceType"`
+	Repo       string `json:"repo"`
+}
+
+func readInstallMetadata(pluginDir string) installMetadata {
+	data, err := os.ReadFile(filepath.Join(pluginDir, ".awan-plugin.json"))
+	if err != nil {
+		return installMetadata{}
+	}
+
+	var metadata installMetadata
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return installMetadata{}
+	}
+	return metadata
 }
 
 func resolveEntry(pluginDir, declaredEntry string) (string, error) {

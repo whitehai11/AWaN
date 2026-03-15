@@ -223,12 +223,21 @@ func (r *Runtime) SearchRegistryPlugins(query string) ([]plugins.RegistryPlugin,
 	return r.pluginRegistry.SearchPlugins(nil, query)
 }
 
-// InstallRegistryPlugin downloads and installs a plugin by name.
-func (r *Runtime) InstallRegistryPlugin(name string) (*plugins.InstallResult, error) {
+// InstallPlugin downloads and installs an official or custom plugin.
+func (r *Runtime) InstallPlugin(source string) (*plugins.InstallResult, error) {
 	if r.pluginRegistry == nil {
 		return nil, errors.New("plugin registry is not available")
 	}
-	result, err := r.pluginRegistry.InstallPlugin(nil, name)
+	source = strings.TrimSpace(source)
+	var (
+		result *plugins.InstallResult
+		err error
+	)
+	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") || strings.Count(source, "/") == 1 {
+		result, err = r.pluginRegistry.InstallCustomPlugin(nil, source)
+	} else {
+		result, err = r.pluginRegistry.InstallPlugin(nil, source)
+	}
 	if err != nil {
 		return nil, err
 	}

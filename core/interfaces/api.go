@@ -186,6 +186,9 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 		Version     string `json:"version"`
 		Description string `json:"description"`
 		Status      string `json:"status"`
+		Repo        string `json:"repo"`
+		SourceType  string `json:"sourceType"`
+		Tools       []string `json:"tools"`
 	}
 
 	plugins := make([]payload, 0, len(definitions))
@@ -195,6 +198,9 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 			Version:     definition.Version,
 			Description: definition.Description,
 			Status:      definition.Status,
+			Repo:        definition.Repo,
+			SourceType:  definition.SourceType,
+			Tools:       definition.Tools,
 		})
 	}
 
@@ -239,13 +245,18 @@ func (a *API) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 
 	var request struct {
 		Name string `json:"name"`
+		Repo string `json:"repo"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	result, err := a.runtime.InstallRegistryPlugin(request.Name)
+	source := request.Name
+	if request.Repo != "" {
+		source = request.Repo
+	}
+	result, err := a.runtime.InstallPlugin(source)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
