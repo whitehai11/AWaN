@@ -44,7 +44,7 @@ func New(cfg *config.Config) (*Runtime, error) {
 		return nil, err
 	}
 
-	pluginRunner, err := plugins.NewRunner(agentFS)
+	pluginRunner, err := plugins.NewRunner(agentFS, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (r *Runtime) InstallRegistryPlugin(name string) (*plugins.InstallResult, er
 		return nil, err
 	}
 
-	reloaded, err := plugins.NewRunner(r.fs)
+	reloaded, err := plugins.NewRunner(r.fs, r.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (r *Runtime) RemoveInstalledPlugin(name string) (*plugins.RemoveResult, err
 		return nil, err
 	}
 
-	reloaded, err := plugins.NewRunner(r.fs)
+	reloaded, err := plugins.NewRunner(r.fs, r.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +287,7 @@ func (r *Runtime) EnableInstalledPlugin(name string) (*plugins.ToggleResult, err
 		return nil, err
 	}
 
-	reloaded, err := plugins.NewRunner(r.fs)
+	reloaded, err := plugins.NewRunner(r.fs, r.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (r *Runtime) DisableInstalledPlugin(name string) (*plugins.ToggleResult, er
 		return nil, err
 	}
 
-	reloaded, err := plugins.NewRunner(r.fs)
+	reloaded, err := plugins.NewRunner(r.fs, r.logger)
 	if err != nil {
 		return nil, err
 	}

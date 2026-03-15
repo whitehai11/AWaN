@@ -3,10 +3,8 @@ package plugins
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/whitehai11/AWaN/core/filesystem"
 	"github.com/whitehai11/AWaN/core/tools"
+	"github.com/whitehai11/AWaN/core/utils"
 )
 
 const defaultPluginTimeout = 30 * time.Second
@@ -48,10 +47,11 @@ type Runner struct {
 	fs         *filesystem.AgentFS
 	plugins    map[string]Definition
 	codeRunner *tools.CodeRunner
+	logger     *utils.Logger
 }
 
 // NewRunner loads plugins from ~/.awan/plugins and registers built-in helpers.
-func NewRunner(fs *filesystem.AgentFS) (*Runner, error) {
+func NewRunner(fs *filesystem.AgentFS, logger *utils.Logger) (*Runner, error) {
 	pluginMap, err := LoadPlugins(fs.Paths().Plugins)
 	if err != nil {
 		return nil, err
@@ -82,6 +82,7 @@ func NewRunner(fs *filesystem.AgentFS) (*Runner, error) {
 		fs:         fs,
 		plugins:    pluginMap,
 		codeRunner: codeRunner,
+		logger:     logger,
 	}, nil
 }
 
@@ -145,34 +146,34 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		"AWAN_PLUGIN_SANDBOX=1",
 	)
 
-	request := ExecuteRequest{
-		Plugin: pluginName,
-		Args:   args,
-	}
-	data, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-
 	stdin, err := command.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
 
-	var stdout bytes.Buffer
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
 	var stderr bytes.Buffer
-	command.Stdout = &stdout
 	command.Stderr = &stderr
 
 	if err := command.Start(); err != nil {
 		return nil, err
 	}
 
-	if _, err := io.Copy(stdin, bytes.NewReader(data)); err != nil {
-		_ = stdin.Close()
+	client := newProtocolClient(pluginName, stdin, stdout, r.logger)
+	defer func() { _ = client.Close() }()
+
+	if err := client.Handshake(ctx, pluginName); err != nil {
+		_ = command.Process.Kill()
+		_ = command.Wait()
 		return nil, err
 	}
-	_ = stdin.Close()
+
+	response, callErr := client.CallTool(ctx, "req-1", pluginName, args)
+	_ = client.Close()
 
 	if err := command.Wait(); err != nil {
 		message := strings.TrimSpace(stderr.String())
@@ -182,12 +183,11 @@ func (r *Runner) Execute(ctx context.Context, allowedPlugins []string, pluginNam
 		return nil, fmt.Errorf("plugin %q failed: %s", pluginName, message)
 	}
 
-	var response ExecuteResponse
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		return nil, fmt.Errorf("plugin %q returned invalid JSON: %w", pluginName, err)
+	if callErr != nil {
+		return nil, callErr
 	}
 
-	return &response, nil
+	return response, nil
 }
 
 func prepareCommand(ctx context.Context, definition Definition) (*exec.Cmd, error) {
