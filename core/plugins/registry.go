@@ -46,6 +46,7 @@ type InstallResult struct {
 	Path    string `json:"path"`
 	Source  string `json:"source"`
 	Type    string `json:"type"`
+	UpdateAvailable bool `json:"updateAvailable"`
 }
 
 // RemoveResult summarizes a removed plugin.
@@ -199,7 +200,37 @@ func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
 
 // InstalledPluginDetails returns installed plugins including enabled/disabled status.
 func (r *Registry) InstalledPluginDetails() ([]InstalledPlugin, error) {
-	return ListInstalledPlugins(r.fs.Paths().Plugins)
+	installed, err := ListInstalledPlugins(r.fs.Paths().Plugins)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.syncPluginState(installed); err != nil {
+		return nil, err
+	}
+
+	index, err := r.FetchRegistry(nil)
+	if err == nil {
+		latestByName := make(map[string]RegistryPlugin, len(index.Plugins))
+		for _, plugin := range index.Plugins {
+			latestByName[strings.ToLower(strings.TrimSpace(plugin.Name))] = plugin
+		}
+
+		for i := range installed {
+			registryPlugin, ok := latestByName[strings.ToLower(strings.TrimSpace(installed[i].Name))]
+			if !ok || strings.TrimSpace(registryPlugin.Version) == "" || strings.TrimSpace(installed[i].Version) == "" {
+				continue
+			}
+
+			installed[i].LatestVersion = registryPlugin.Version
+			comparison, cmpErr := CompareVersions(installed[i].Version, registryPlugin.Version)
+			if cmpErr == nil && comparison < 0 {
+				installed[i].UpdateAvailable = true
+			}
+		}
+	}
+
+	return installed, nil
 }
 
 // RemovePlugin deletes an installed plugin directory from ~/.awan/plugins.
@@ -219,6 +250,9 @@ func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
 		if err := os.RemoveAll(definition.Dir); err != nil {
 			return nil, err
 		}
+		if err := r.removePluginStateEntry(definition.Name); err != nil {
+			return nil, err
+		}
 
 		return &RemoveResult{
 			Name: definition.Name,
@@ -229,6 +263,9 @@ func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
 	targetDir := filepath.Join(r.fs.Paths().Plugins, pluginDirName(needle))
 	if info, err := os.Stat(targetDir); err == nil && info.IsDir() {
 		if err := os.RemoveAll(targetDir); err != nil {
+			return nil, err
+		}
+		if err := r.removePluginStateEntry(needle); err != nil {
 			return nil, err
 		}
 		return &RemoveResult{Name: needle, Path: targetDir}, nil
@@ -334,6 +371,14 @@ func (r *Registry) installEntry(ctx context.Context, entry RegistryPlugin) (*Ins
 	}); err != nil {
 		return nil, err
 	}
+	if err := r.upsertPluginState(PluginStateEntry{
+		Version:     entry.Version,
+		Repo:        strings.TrimSpace(entry.Repo),
+		SourceType:  "official",
+		InstalledAt: time.Now().UTC(),
+	}, entry.Name); err != nil {
+		return nil, err
+	}
 
 	return &InstallResult{
 		Name:    entry.Name,
@@ -392,6 +437,14 @@ func (r *Registry) InstallCustomPlugin(ctx context.Context, repoURL string) (*In
 		SourceType: "custom",
 		Repo:       repoURL,
 	}); err != nil {
+		return nil, err
+	}
+	if err := r.upsertPluginState(PluginStateEntry{
+		Version:     manifest.Version,
+		Repo:        repoURL,
+		SourceType:  "custom",
+		InstalledAt: time.Now().UTC(),
+	}, manifest.Name); err != nil {
 		return nil, err
 	}
 
@@ -732,4 +785,57 @@ func normalizeGitHubRepo(repo string) string {
 		return "https://github.com/" + strings.TrimSuffix(repo, ".git")
 	}
 	return repo
+}
+
+func (r *Registry) syncPluginState(installed []InstalledPlugin) error {
+	existing, err := loadPluginState(r.fs.Paths().Plugins)
+	if err != nil {
+		return err
+	}
+
+	state := PluginState{}
+	for _, plugin := range installed {
+		entry := PluginStateEntry{
+			Version:    plugin.Version,
+			Repo:       plugin.Repo,
+			SourceType: plugin.SourceType,
+		}
+		if current, ok := existing[plugin.Name]; ok && !current.InstalledAt.IsZero() {
+			entry.InstalledAt = current.InstalledAt
+		} else {
+			entry.InstalledAt = time.Now().UTC()
+		}
+		state[plugin.Name] = PluginStateEntry{
+			Version:     entry.Version,
+			Repo:        entry.Repo,
+			SourceType:  entry.SourceType,
+			InstalledAt: entry.InstalledAt,
+		}
+	}
+	return savePluginState(r.fs.Paths().Plugins, state)
+}
+
+func (r *Registry) upsertPluginState(entry PluginStateEntry, name string) error {
+	state, err := loadPluginState(r.fs.Paths().Plugins)
+	if err != nil {
+		return err
+	}
+	existing := state[name]
+	if !existing.InstalledAt.IsZero() {
+		entry.InstalledAt = existing.InstalledAt
+	}
+	if entry.InstalledAt.IsZero() {
+		entry.InstalledAt = time.Now().UTC()
+	}
+	state[name] = entry
+	return savePluginState(r.fs.Paths().Plugins, state)
+}
+
+func (r *Registry) removePluginStateEntry(name string) error {
+	state, err := loadPluginState(r.fs.Paths().Plugins)
+	if err != nil {
+		return err
+	}
+	delete(state, name)
+	return savePluginState(r.fs.Paths().Plugins, state)
 }

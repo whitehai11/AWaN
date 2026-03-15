@@ -41,6 +41,8 @@ type InstalledPlugin struct {
 	Dir         string            `json:"dir"`
 	SourceType  string            `json:"sourceType"`
 	Repo        string            `json:"repo"`
+	LatestVersion string          `json:"latestVersion,omitempty"`
+	UpdateAvailable bool          `json:"updateAvailable"`
 }
 
 // LoadPlugins scans plugin directories and loads their manifests.
@@ -94,6 +96,9 @@ func loadPluginDefinition(pluginDir string) (Definition, error) {
 	if strings.TrimSpace(manifest.Name) == "" {
 		return Definition{}, errors.New("plugin manifest is missing name")
 	}
+	if strings.TrimSpace(manifest.Version) == "" {
+		return Definition{}, errors.New("plugin manifest is missing version")
+	}
 
 	entry, err := resolveEntry(pluginDir, manifest.Entry)
 	if err != nil {
@@ -109,6 +114,11 @@ func loadPluginDefinition(pluginDir string) (Definition, error) {
 
 // ListInstalledPlugins returns enabled and disabled plugins present on disk.
 func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
+	state, err := loadPluginState(root)
+	if err != nil {
+		return nil, err
+	}
+
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, err
@@ -129,10 +139,23 @@ func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
 			return nil, err
 		}
 		metadata := readInstallMetadata(pluginDir)
+		stateEntry := state[manifest.Name]
+		version := manifest.Version
+		if strings.TrimSpace(version) == "" {
+			version = stateEntry.Version
+		}
+		repo := metadata.Repo
+		if repo == "" {
+			repo = stateEntry.Repo
+		}
+		sourceType := metadata.SourceType
+		if sourceType == "" {
+			sourceType = stateEntry.SourceType
+		}
 
 		result = append(result, InstalledPlugin{
 			Name:        manifest.Name,
-			Version:     manifest.Version,
+			Version:     version,
 			Description: manifest.Description,
 			Entry:       manifest.Entry,
 			Tools:       manifest.Tools,
@@ -140,8 +163,8 @@ func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
 			Permissions: manifest.Permissions,
 			Status:      status,
 			Dir:         pluginDir,
-			SourceType:  metadata.SourceType,
-			Repo:        metadata.Repo,
+			SourceType:  sourceType,
+			Repo:        repo,
 		})
 	}
 

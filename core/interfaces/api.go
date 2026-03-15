@@ -189,6 +189,8 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 		Repo        string `json:"repo"`
 		SourceType  string `json:"sourceType"`
 		Tools       []string `json:"tools"`
+		LatestVersion string `json:"latestVersion,omitempty"`
+		UpdateAvailable bool `json:"updateAvailable"`
 	}
 
 	plugins := make([]payload, 0, len(definitions))
@@ -201,6 +203,8 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 			Repo:        definition.Repo,
 			SourceType:  definition.SourceType,
 			Tools:       definition.Tools,
+			LatestVersion: definition.LatestVersion,
+			UpdateAvailable: definition.UpdateAvailable,
 		})
 	}
 
