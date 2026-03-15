@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - name: Install dependencies
         run: go mod tidy
@@ -62,6 +62,9 @@ jobs:
     needs: build
 
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -76,19 +79,21 @@ jobs:
 
       - name: Create or update release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: auto-${{ github.run_number }}
           RELEASE_NAME: Build ${{ github.run_number }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" dist/*.exe dist/*linux* --clobber
+          if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/*.exe dist/*linux* --clobber --repo "$REPO"
           else
             gh release create "$TAG_NAME" \
               dist/*.exe \
               dist/*linux* \
               --title "$RELEASE_NAME" \
               --notes "Automated build for run ${{ github.run_number }}" \
-              --target "${{ github.sha }}"
+              --target "${{ github.sha }}" \
+              --repo "$REPO"
           fi
