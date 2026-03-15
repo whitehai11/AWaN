@@ -30,6 +30,9 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("/plugins/registry", a.handlePluginRegistry)
 	mux.HandleFunc("/plugins/search", a.handlePluginSearch)
 	mux.HandleFunc("/plugins/install", a.handlePluginInstall)
+	mux.HandleFunc("/plugins/remove", a.handlePluginRemove)
+	mux.HandleFunc("/plugins/enable", a.handlePluginEnable)
+	mux.HandleFunc("/plugins/disable", a.handlePluginDisable)
 	mux.HandleFunc("/files", a.handleFiles)
 	mux.HandleFunc("/tools/execute", a.handleToolExecute)
 	mux.HandleFunc("/healthz", a.handleHealth)
@@ -169,23 +172,25 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	definitions := a.runtime.RegisteredPlugins()
+	definitions, err := a.runtime.InstalledPluginDetails()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	type payload struct {
-		Name        string            `json:"name"`
-		Version     string            `json:"version"`
-		Description string            `json:"description"`
-		Entry       string            `json:"entry"`
-		Parameters  map[string]string `json:"parameters"`
+		Name        string `json:"name"`
+		Version     string `json:"version"`
+		Description string `json:"description"`
+		Status      string `json:"status"`
 	}
 
 	plugins := make([]payload, 0, len(definitions))
 	for _, definition := range definitions {
 		plugins = append(plugins, payload{
-			Name:        definition.Manifest.Name,
-			Version:     definition.Manifest.Version,
-			Description: definition.Manifest.Description,
-			Entry:       definition.Manifest.Entry,
-			Parameters:  definition.Manifest.Parameters,
+			Name:        definition.Name,
+			Version:     definition.Version,
+			Description: definition.Description,
+			Status:      definition.Status,
 		})
 	}
 
@@ -237,6 +242,75 @@ func (a *API) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := a.runtime.InstallRegistryPlugin(request.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) handlePluginRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := a.runtime.RemoveInstalledPlugin(request.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) handlePluginEnable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := a.runtime.EnableInstalledPlugin(request.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) handlePluginDisable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := a.runtime.DisableInstalledPlugin(request.Name)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

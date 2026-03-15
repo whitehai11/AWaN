@@ -249,6 +249,14 @@ func (r *Runtime) InstalledPlugins() ([]plugins.RegistryPlugin, error) {
 	return r.pluginRegistry.InstalledPlugins()
 }
 
+// InstalledPluginDetails lists plugins on disk with their status.
+func (r *Runtime) InstalledPluginDetails() ([]plugins.InstalledPlugin, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+	return r.pluginRegistry.InstalledPluginDetails()
+}
+
 // RemoveInstalledPlugin deletes an installed plugin and reloads the runtime runner.
 func (r *Runtime) RemoveInstalledPlugin(name string) (*plugins.RemoveResult, error) {
 	if r.pluginRegistry == nil {
@@ -256,6 +264,44 @@ func (r *Runtime) RemoveInstalledPlugin(name string) (*plugins.RemoveResult, err
 	}
 
 	result, err := r.pluginRegistry.RemovePlugin(name)
+	if err != nil {
+		return nil, err
+	}
+
+	reloaded, err := plugins.NewRunner(r.fs)
+	if err != nil {
+		return nil, err
+	}
+	r.plugins = reloaded
+	return result, nil
+}
+
+// EnableInstalledPlugin enables a plugin and reloads the runtime runner.
+func (r *Runtime) EnableInstalledPlugin(name string) (*plugins.ToggleResult, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+
+	result, err := r.pluginRegistry.EnablePlugin(name)
+	if err != nil {
+		return nil, err
+	}
+
+	reloaded, err := plugins.NewRunner(r.fs)
+	if err != nil {
+		return nil, err
+	}
+	r.plugins = reloaded
+	return result, nil
+}
+
+// DisableInstalledPlugin disables a plugin and reloads the runtime runner.
+func (r *Runtime) DisableInstalledPlugin(name string) (*plugins.ToggleResult, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+
+	result, err := r.pluginRegistry.DisablePlugin(name)
 	if err != nil {
 		return nil, err
 	}

@@ -47,6 +47,13 @@ type RemoveResult struct {
 	Path string `json:"path"`
 }
 
+// ToggleResult summarizes a plugin enable/disable operation.
+type ToggleResult struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
 // Registry fetches and installs plugins from the public registry.
 type Registry struct {
 	fs         *filesystem.AgentFS
@@ -165,7 +172,7 @@ func (r *Registry) InstallPlugin(ctx context.Context, name string) (*InstallResu
 
 // InstalledPlugins lists plugins currently installed under ~/.awan/plugins.
 func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
-	definitions, err := LoadPlugins(r.fs.Paths().Plugins)
+	definitions, err := r.InstalledPluginDetails()
 	if err != nil {
 		return nil, err
 	}
@@ -173,9 +180,9 @@ func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
 	result := make([]RegistryPlugin, 0, len(definitions))
 	for _, definition := range definitions {
 		result = append(result, RegistryPlugin{
-			Name:        definition.Manifest.Name,
-			Description: definition.Manifest.Description,
-			Version:     definition.Manifest.Version,
+			Name:        definition.Name,
+			Description: definition.Description,
+			Version:     definition.Version,
 			Repo:        "",
 		})
 	}
@@ -183,17 +190,22 @@ func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
 	return result, nil
 }
 
+// InstalledPluginDetails returns installed plugins including enabled/disabled status.
+func (r *Registry) InstalledPluginDetails() ([]InstalledPlugin, error) {
+	return ListInstalledPlugins(r.fs.Paths().Plugins)
+}
+
 // RemovePlugin deletes an installed plugin directory from ~/.awan/plugins.
 func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
-	definitions, err := LoadPlugins(r.fs.Paths().Plugins)
+	definitions, err := ListInstalledPlugins(r.fs.Paths().Plugins)
 	if err != nil {
 		return nil, err
 	}
 
 	needle := strings.TrimSpace(name)
 	for _, definition := range definitions {
-		if !strings.EqualFold(definition.Manifest.Name, needle) &&
-			!strings.EqualFold(pluginDirName(definition.Manifest.Name), needle) {
+		if !strings.EqualFold(definition.Name, needle) &&
+			!strings.EqualFold(pluginDirName(definition.Name), needle) {
 			continue
 		}
 
@@ -202,7 +214,7 @@ func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
 		}
 
 		return &RemoveResult{
-			Name: definition.Manifest.Name,
+			Name: definition.Name,
 			Path: definition.Dir,
 		}, nil
 	}
@@ -216,6 +228,52 @@ func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
 	}
 
 	return nil, fmt.Errorf("plugin %q is not installed", name)
+}
+
+// EnablePlugin marks a plugin as enabled and makes it loadable by the runtime.
+func (r *Registry) EnablePlugin(name string) (*ToggleResult, error) {
+	return r.togglePlugin(name, "enabled")
+}
+
+// DisablePlugin marks a plugin as disabled without deleting it.
+func (r *Registry) DisablePlugin(name string) (*ToggleResult, error) {
+	return r.togglePlugin(name, "disabled")
+}
+
+func (r *Registry) togglePlugin(name, targetStatus string) (*ToggleResult, error) {
+	installed, err := ListInstalledPlugins(r.fs.Paths().Plugins)
+	if err != nil {
+		return nil, err
+	}
+
+	needle := strings.TrimSpace(name)
+	for _, plugin := range installed {
+		if !strings.EqualFold(plugin.Name, needle) &&
+			!strings.EqualFold(pluginDirName(plugin.Name), needle) {
+			continue
+		}
+
+		if plugin.Status == targetStatus {
+			return &ToggleResult{Name: plugin.Name, Path: plugin.Dir, Status: plugin.Status}, nil
+		}
+
+		from := filepath.Join(plugin.Dir, manifestFileForStatus(plugin.Status))
+		to := filepath.Join(plugin.Dir, manifestFileForStatus(targetStatus))
+		if err := os.Rename(from, to); err != nil {
+			return nil, err
+		}
+
+		return &ToggleResult{Name: plugin.Name, Path: plugin.Dir, Status: targetStatus}, nil
+	}
+
+	return nil, fmt.Errorf("plugin %q is not installed", name)
+}
+
+func manifestFileForStatus(status string) string {
+	if status == "disabled" {
+		return "plugin.disabled.json"
+	}
+	return "plugin.json"
 }
 
 func (r *Registry) installEntry(ctx context.Context, entry RegistryPlugin) (*InstallResult, error) {

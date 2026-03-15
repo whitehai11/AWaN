@@ -25,6 +25,17 @@ type Definition struct {
 	Entry    string
 }
 
+// InstalledPlugin describes a plugin present on disk, including status.
+type InstalledPlugin struct {
+	Name        string            `json:"name"`
+	Version     string            `json:"version"`
+	Description string            `json:"description"`
+	Entry       string            `json:"entry"`
+	Parameters  map[string]string `json:"parameters"`
+	Status      string            `json:"status"`
+	Dir         string            `json:"dir"`
+}
+
 // LoadPlugins scans plugin directories and loads their manifests.
 func LoadPlugins(root string) (map[string]Definition, error) {
 	entries, err := os.ReadDir(root)
@@ -75,6 +86,69 @@ func loadPluginDefinition(pluginDir string) (Definition, error) {
 		Dir:      pluginDir,
 		Entry:    entry,
 	}, nil
+}
+
+// ListInstalledPlugins returns enabled and disabled plugins present on disk.
+func ListInstalledPlugins(root string) ([]InstalledPlugin, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]InstalledPlugin, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		pluginDir := filepath.Join(root, entry.Name())
+		manifest, status, err := readInstalledManifest(pluginDir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+
+		result = append(result, InstalledPlugin{
+			Name:        manifest.Name,
+			Version:     manifest.Version,
+			Description: manifest.Description,
+			Entry:       manifest.Entry,
+			Parameters:  manifest.Parameters,
+			Status:      status,
+			Dir:         pluginDir,
+		})
+	}
+
+	return result, nil
+}
+
+func readInstalledManifest(pluginDir string) (Manifest, string, error) {
+	type candidate struct {
+		file   string
+		status string
+	}
+	for _, item := range []candidate{
+		{file: "plugin.json", status: "enabled"},
+		{file: "plugin.disabled.json", status: "disabled"},
+	} {
+		data, err := os.ReadFile(filepath.Join(pluginDir, item.file))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return Manifest{}, "", err
+		}
+
+		var manifest Manifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return Manifest{}, "", err
+		}
+		return manifest, item.status, nil
+	}
+
+	return Manifest{}, "", os.ErrNotExist
 }
 
 func resolveEntry(pluginDir, declaredEntry string) (string, error) {
