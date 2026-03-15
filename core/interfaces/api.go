@@ -119,7 +119,11 @@ func (a *API) handleMemoryStore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"version": runtime.Version,
+		"auth":    "none",
+	})
 }
 
 func (a *API) handleAgents(w http.ResponseWriter, r *http.Request) {
