@@ -2,7 +2,7 @@ package agent
 
 import (
 	"strings"
-	"github.com/awan/awan/core/models"
+	"github.com/whitehai11/AWaN/core/models"
 )
 
 // RunLoop executes the current prompt -> model -> response flow.

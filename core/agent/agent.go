@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/awan/awan/core/filesystem"
-	"github.com/awan/awan/core/memory"
-	"github.com/awan/awan/core/models"
-	"github.com/awan/awan/core/tools"
-	"github.com/awan/awan/core/types"
-	"github.com/awan/awan/core/utils"
+	"github.com/whitehai11/AWaN/core/filesystem"
+	"github.com/whitehai11/AWaN/core/memory"
+	"github.com/whitehai11/AWaN/core/models"
+	"github.com/whitehai11/AWaN/core/tools"
+	"github.com/whitehai11/AWaN/core/types"
+	"github.com/whitehai11/AWaN/core/utils"
 )
 
 // Agent wraps a configured model and runtime services.

@@ -6,15 +6,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/awan/awan/core/agent"
-	"github.com/awan/awan/core/auth"
-	"github.com/awan/awan/core/config"
-	"github.com/awan/awan/core/filesystem"
-	"github.com/awan/awan/core/memory"
-	"github.com/awan/awan/core/models"
-	"github.com/awan/awan/core/tools"
-	"github.com/awan/awan/core/types"
-	"github.com/awan/awan/core/utils"
+	"github.com/whitehai11/AWaN/core/agent"
+	"github.com/whitehai11/AWaN/core/auth"
+	"github.com/whitehai11/AWaN/core/config"
+	"github.com/whitehai11/AWaN/core/filesystem"
+	"github.com/whitehai11/AWaN/core/memory"
+	"github.com/whitehai11/AWaN/core/models"
+	"github.com/whitehai11/AWaN/core/tools"
+	"github.com/whitehai11/AWaN/core/types"
+	"github.com/whitehai11/AWaN/core/utils"
 )
 
 // Runtime owns configuration, model registration, storage, and agent execution.

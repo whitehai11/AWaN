@@ -8,11 +8,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/awan/awan/core/config"
-	"github.com/awan/awan/core/interfaces"
-	"github.com/awan/awan/core/runtime"
-	"github.com/awan/awan/core/types"
-	"github.com/awan/awan/internal/updater"
+	"github.com/whitehai11/AWaN/core/config"
+	"github.com/whitehai11/AWaN/core/interfaces"
+	"github.com/whitehai11/AWaN/core/runtime"
+	"github.com/whitehai11/AWaN/core/types"
+	"github.com/whitehai11/AWaN/internal/updater"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func run(args []string) error {
 
 	updater.StartBackground(updater.Options{
 		AppName:        "AWaN Core",
-		Repo:           "awan/core",
+		Repo:           "whitehai11/AWaN",
 		Version:        Version,
 		BinaryBaseName: "awan-core",
 		Args:           args,

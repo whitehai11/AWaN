@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/awan/awan/core/runtime"
+	"github.com/whitehai11/AWaN/core/runtime"
 )
 
 // Server hosts the local runtime API.

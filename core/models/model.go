@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/awan/awan/core/auth"
-	"github.com/awan/awan/core/config"
+	"github.com/whitehai11/AWaN/core/auth"
+	"github.com/whitehai11/AWaN/core/config"
 )
 
 // Model is the abstraction implemented by every model provider.

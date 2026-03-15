@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/awan/awan/core/auth"
-	"github.com/awan/awan/core/config"
+	"github.com/whitehai11/AWaN/core/auth"
+	"github.com/whitehai11/AWaN/core/config"
 )
 
 // Factory creates a configured model instance at runtime.

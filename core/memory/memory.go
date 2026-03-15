@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/awan/awan/core/filesystem"
-	"github.com/awan/awan/core/types"
+	"github.com/whitehai11/AWaN/core/filesystem"
+	"github.com/whitehai11/AWaN/core/types"
 )
 
 // Message is a lightweight view used by the agent loop.

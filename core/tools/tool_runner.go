@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/awan/awan/core/filesystem"
+	"github.com/whitehai11/AWaN/core/filesystem"
 )
 
 const defaultToolTimeout = 30 * time.Second

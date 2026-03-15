@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/awan/awan/core/runtime"
-	"github.com/awan/awan/core/types"
+	"github.com/whitehai11/AWaN/core/runtime"
+	"github.com/whitehai11/AWaN/core/types"
 )
 
 // API exposes the local HTTP contract used by UI clients.
