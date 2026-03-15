@@ -12,7 +12,7 @@ import (
 	"github.com/whitehai11/AWaN/core/filesystem"
 	"github.com/whitehai11/AWaN/core/memory"
 	"github.com/whitehai11/AWaN/core/models"
-	"github.com/whitehai11/AWaN/core/tools"
+	"github.com/whitehai11/AWaN/core/plugins"
 	"github.com/whitehai11/AWaN/core/types"
 	"github.com/whitehai11/AWaN/core/utils"
 )
@@ -26,7 +26,7 @@ type Runtime struct {
 	memory   *memory.Manager
 	fs       *filesystem.AgentFS
 	agents   map[string]agent.Definition
-	tools    *tools.Runner
+	plugins  *plugins.Runner
 }
 
 // New creates a runtime using the provided configuration.
@@ -43,7 +43,7 @@ func New(cfg *config.Config) (*Runtime, error) {
 		return nil, err
 	}
 
-	toolRunner, err := tools.NewRunner(agentFS)
+	pluginRunner, err := plugins.NewRunner(agentFS)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func New(cfg *config.Config) (*Runtime, error) {
 		memory:   memoryManager,
 		fs:       agentFS,
 		agents:   loadedAgents,
-		tools:    toolRunner,
+		plugins:  pluginRunner,
 	}, nil
 }
 
@@ -105,12 +105,12 @@ func (r *Runtime) RegisteredAgents() map[string]agent.Definition {
 	return agents
 }
 
-// RegisteredTools returns the loaded tool definitions.
-func (r *Runtime) RegisteredTools() map[string]tools.Definition {
-	if r.tools == nil {
-		return map[string]tools.Definition{}
+// RegisteredPlugins returns the loaded plugin definitions.
+func (r *Runtime) RegisteredPlugins() map[string]plugins.Definition {
+	if r.plugins == nil {
+		return map[string]plugins.Definition{}
 	}
-	return r.tools.RegisteredTools()
+	return r.plugins.RegisteredPlugins()
 }
 
 // ListFiles returns the lightweight runtime file list.
@@ -139,7 +139,7 @@ func (r *Runtime) Agent(agentName, modelName string) (*agent.Agent, error) {
 
 	r.logger.Log("MODEL", fmt.Sprintf("Using %s", model.Name()))
 	definition.Model = modelName
-	return agent.NewAgent(definition, model, r.memory, r.fs, r.tools, r.logger), nil
+	return agent.NewAgent(definition, model, r.memory, r.fs, r.plugins, r.logger), nil
 }
 
 // Run executes a single agent request.
@@ -187,17 +187,17 @@ func (r *Runtime) StoreMemory(request types.MemoryStoreRequest) (*types.MemoryRe
 	return &record, nil
 }
 
-// ExecuteTool runs a permitted tool for the requested agent.
-func (r *Runtime) ExecuteTool(agentName, toolName string, args map[string]any) (*tools.ExecuteResponse, error) {
+// ExecuteTool runs a permitted plugin for the requested agent.
+func (r *Runtime) ExecuteTool(agentName, toolName string, args map[string]any) (*plugins.ExecuteResponse, error) {
 	definition, ok := r.agents[agentName]
 	if !ok {
 		return nil, fmt.Errorf("agent %q is not registered", agentName)
 	}
-	if r.tools == nil {
-		return nil, errors.New("tool runner is not available")
+	if r.plugins == nil {
+		return nil, errors.New("plugin runner is not available")
 	}
 
-	return r.tools.Execute(nil, definition.Tools, toolName, args)
+	return r.plugins.Execute(nil, definition.Tools, toolName, args)
 }
 
 func fallback(value, defaultValue string) string {

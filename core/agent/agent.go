@@ -8,7 +8,7 @@ import (
 	"github.com/whitehai11/AWaN/core/filesystem"
 	"github.com/whitehai11/AWaN/core/memory"
 	"github.com/whitehai11/AWaN/core/models"
-	"github.com/whitehai11/AWaN/core/tools"
+	"github.com/whitehai11/AWaN/core/plugins"
 	"github.com/whitehai11/AWaN/core/types"
 	"github.com/whitehai11/AWaN/core/utils"
 )
@@ -19,18 +19,18 @@ type Agent struct {
 	model      models.Model
 	memory     *memory.Manager
 	fs         *filesystem.AgentFS
-	tools      *tools.Runner
+	plugins    *plugins.Runner
 	logger     *utils.Logger
 }
 
 // NewAgent creates an agent bound to a specific model implementation.
-func NewAgent(definition Definition, model models.Model, memoryManager *memory.Manager, fs *filesystem.AgentFS, toolRunner *tools.Runner, logger *utils.Logger) *Agent {
+func NewAgent(definition Definition, model models.Model, memoryManager *memory.Manager, fs *filesystem.AgentFS, pluginRunner *plugins.Runner, logger *utils.Logger) *Agent {
 	return &Agent{
 		definition: definition,
 		model:      model,
 		memory:     memoryManager,
 		fs:         fs,
-		tools:      toolRunner,
+		plugins:    pluginRunner,
 		logger:     logger,
 	}
 }
@@ -61,7 +61,7 @@ func (a *Agent) Run(prompt string) (*types.AgentResponse, error) {
 		Tools:       a.definition.Tools,
 		Filesystem:  true,
 		Memory:      a.definition.Memory,
-		Plugins:     a.tools != nil,
+		Plugins:     a.plugins != nil,
 		Permissions: []string{"agentfs:read", "agentfs:write", "memory:id-only"},
 	})
 

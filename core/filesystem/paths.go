@@ -9,12 +9,13 @@ const defaultRootDir = ".awan"
 
 // Paths contains the isolated directory layout for the runtime.
 type Paths struct {
-	Root   string
-	Agents string
-	Memory string
-	Files  string
-	Config string
-	Tools  string
+	Root    string
+	Agents  string
+	Memory  string
+	Files   string
+	Config  string
+	Tools   string
+	Plugins string
 	Sandbox string
 }
 
@@ -29,16 +30,17 @@ func NewPaths(root string) (*Paths, error) {
 	}
 
 	paths := &Paths{
-		Root:   root,
-		Agents: filepath.Join(root, "agents"),
-		Memory: filepath.Join(root, "memory"),
-		Files:  filepath.Join(root, "files"),
-		Config: filepath.Join(root, "config"),
-		Tools:  filepath.Join(root, "tools"),
+		Root:    root,
+		Agents:  filepath.Join(root, "agents"),
+		Memory:  filepath.Join(root, "memory"),
+		Files:   filepath.Join(root, "files"),
+		Config:  filepath.Join(root, "config"),
+		Tools:   filepath.Join(root, "tools"),
+		Plugins: filepath.Join(root, "plugins"),
 		Sandbox: filepath.Join(root, "sandbox"),
 	}
 
-	for _, dir := range []string{paths.Root, paths.Agents, paths.Memory, paths.Files, paths.Config, paths.Tools, paths.Sandbox} {
+	for _, dir := range []string{paths.Root, paths.Agents, paths.Memory, paths.Files, paths.Config, paths.Tools, paths.Plugins, paths.Sandbox} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}

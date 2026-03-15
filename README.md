@@ -25,7 +25,8 @@ The runtime is organized under `core/`:
 - `core/runtime`: the central service container
 - `core/memory`: in-memory and JSON-backed memory modules plus a vector-memory extension point
 - `core/filesystem`: isolated storage rooted at `~/.awan/`
-- `core/tools`: secure tool manifest loading and isolated plugin execution
+- `core/plugins`: plugin manifest loading and isolated plugin execution
+- `core/tools`: built-in code execution sandbox
 - `core/interfaces`: local HTTP API and server bootstrap
 - `core/auth`: OAuth token storage and refresh support
 - `core/config`: JSON runtime config plus `.awan` profile parsing
@@ -72,6 +73,7 @@ The runtime listens on `localhost:7452` by default and exposes:
 - `GET /memory`
 - `POST /memory/store`
 - `GET /agents`
+- `GET /plugins`
 - `GET /files`
 - `POST /tools/execute`
 
@@ -105,6 +107,7 @@ AWaN isolates runtime state under:
   files/
   config/
   tools/
+  plugins/
   sandbox/
 ```
 
@@ -186,33 +189,54 @@ description = research information
 
 An agent can only execute tools listed in its own definition.
 
-## Tool Plugin System
+## Plugin System
 
-AWaN supports external tools under:
+AWaN supports external plugins under:
 
 ```text
-~/.awan/tools/
+~/.awan/plugins/
   browser/
-    tool.json
+    plugin.json
     main.ts
   filesystem/
-    tool.json
+    plugin.json
     main.ts
 ```
 
-Each tool must include a `tool.json` manifest:
+Each plugin must include a `plugin.json` manifest:
 
 ```json
 {
   "name": "filesystem.read",
+  "version": "1.0.0",
   "description": "Read a file",
+  "entry": "runner.js",
   "parameters": {
     "path": "string"
   }
 }
 ```
 
-The runtime loads tool manifests automatically and executes tools as isolated subprocesses over JSON stdin/stdout.
+The runtime scans `~/.awan/plugins/`, loads manifests automatically, and executes plugins as isolated subprocesses over JSON stdin/stdout.
+
+Example request:
+
+```json
+{
+  "plugin": "browser.navigate",
+  "args": {
+    "url": "https://example.com"
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "result": "page loaded"
+}
+```
 
 ### Built-in Code Runner
 
@@ -267,10 +291,10 @@ The runner enforces:
 
 Security rules:
 
-- tools run in separate processes
-- tool permissions are enforced per agent
+- plugins run in separate processes
+- plugin permissions are enforced per agent using the `tools = ...` field in `.awand`
 - file path arguments are constrained to `~/.awan/files`
-- tools receive `AWAN_FILES_ROOT` rather than unrestricted filesystem paths
+- plugins receive `AWAN_FILES_ROOT` rather than unrestricted filesystem paths
 - file contents are never sent automatically in the base agent snapshot
 
 This is a best-effort runtime sandbox and can be strengthened later with OS-level isolation.

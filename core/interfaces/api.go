@@ -26,6 +26,7 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("/memory", a.handleMemory)
 	mux.HandleFunc("/memory/store", a.handleMemoryStore)
 	mux.HandleFunc("/agents", a.handleAgents)
+	mux.HandleFunc("/plugins", a.handlePlugins)
 	mux.HandleFunc("/files", a.handleFiles)
 	mux.HandleFunc("/tools/execute", a.handleToolExecute)
 	mux.HandleFunc("/healthz", a.handleHealth)
@@ -157,6 +158,35 @@ func (a *API) handleFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
+}
+
+func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	definitions := a.runtime.RegisteredPlugins()
+	type payload struct {
+		Name        string            `json:"name"`
+		Version     string            `json:"version"`
+		Description string            `json:"description"`
+		Entry       string            `json:"entry"`
+		Parameters  map[string]string `json:"parameters"`
+	}
+
+	plugins := make([]payload, 0, len(definitions))
+	for _, definition := range definitions {
+		plugins = append(plugins, payload{
+			Name:        definition.Manifest.Name,
+			Version:     definition.Manifest.Version,
+			Description: definition.Manifest.Description,
+			Entry:       definition.Manifest.Entry,
+			Parameters:  definition.Manifest.Parameters,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": plugins})
 }
 
 func (a *API) handleToolExecute(w http.ResponseWriter, r *http.Request) {
