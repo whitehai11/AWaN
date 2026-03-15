@@ -209,7 +209,7 @@ func (r *Runtime) ExecuteTool(agentName, toolName string, args map[string]any) (
 
 // ListRegistryPlugins fetches the public registry contents.
 func (r *Runtime) ListRegistryPlugins() ([]plugins.RegistryPlugin, error) {
-	if r.registry == nil {
+	if r.pluginRegistry == nil {
 		return nil, errors.New("plugin registry is not available")
 	}
 	return r.pluginRegistry.ListPlugins(nil)
@@ -229,6 +229,33 @@ func (r *Runtime) InstallRegistryPlugin(name string) (*plugins.InstallResult, er
 		return nil, errors.New("plugin registry is not available")
 	}
 	result, err := r.pluginRegistry.InstallPlugin(nil, name)
+	if err != nil {
+		return nil, err
+	}
+
+	reloaded, err := plugins.NewRunner(r.fs)
+	if err != nil {
+		return nil, err
+	}
+	r.plugins = reloaded
+	return result, nil
+}
+
+// InstalledPlugins lists plugins present in ~/.awan/plugins.
+func (r *Runtime) InstalledPlugins() ([]plugins.RegistryPlugin, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+	return r.pluginRegistry.InstalledPlugins()
+}
+
+// RemoveInstalledPlugin deletes an installed plugin and reloads the runtime runner.
+func (r *Runtime) RemoveInstalledPlugin(name string) (*plugins.RemoveResult, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+
+	result, err := r.pluginRegistry.RemovePlugin(name)
 	if err != nil {
 		return nil, err
 	}

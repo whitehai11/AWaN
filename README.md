@@ -64,6 +64,15 @@ You can still run a one-shot prompt from the terminal:
 go run . run "Explain quantum computing"
 ```
 
+The CLI also supports plugin management:
+
+```bash
+go run . plugin list
+go run . plugin search browser
+go run . plugin install browser
+go run . plugin remove browser
+```
+
 ## Local API
 
 The runtime listens on `localhost:7452` by default and exposes:

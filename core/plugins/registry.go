@@ -41,6 +41,12 @@ type InstallResult struct {
 	Source  string `json:"source"`
 }
 
+// RemoveResult summarizes a removed plugin.
+type RemoveResult struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 // Registry fetches and installs plugins from the public registry.
 type Registry struct {
 	fs         *filesystem.AgentFS
@@ -155,6 +161,61 @@ func (r *Registry) InstallPlugin(ctx context.Context, name string) (*InstallResu
 	}
 
 	return r.installEntry(ctx, *selected)
+}
+
+// InstalledPlugins lists plugins currently installed under ~/.awan/plugins.
+func (r *Registry) InstalledPlugins() ([]RegistryPlugin, error) {
+	definitions, err := LoadPlugins(r.fs.Paths().Plugins)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]RegistryPlugin, 0, len(definitions))
+	for _, definition := range definitions {
+		result = append(result, RegistryPlugin{
+			Name:        definition.Manifest.Name,
+			Description: definition.Manifest.Description,
+			Version:     definition.Manifest.Version,
+			Repo:        "",
+		})
+	}
+
+	return result, nil
+}
+
+// RemovePlugin deletes an installed plugin directory from ~/.awan/plugins.
+func (r *Registry) RemovePlugin(name string) (*RemoveResult, error) {
+	definitions, err := LoadPlugins(r.fs.Paths().Plugins)
+	if err != nil {
+		return nil, err
+	}
+
+	needle := strings.TrimSpace(name)
+	for _, definition := range definitions {
+		if !strings.EqualFold(definition.Manifest.Name, needle) &&
+			!strings.EqualFold(pluginDirName(definition.Manifest.Name), needle) {
+			continue
+		}
+
+		if err := os.RemoveAll(definition.Dir); err != nil {
+			return nil, err
+		}
+
+		return &RemoveResult{
+			Name: definition.Manifest.Name,
+			Path: definition.Dir,
+		}, nil
+	}
+
+	targetDir := filepath.Join(r.fs.Paths().Plugins, pluginDirName(needle))
+	if info, err := os.Stat(targetDir); err == nil && info.IsDir() {
+		if err := os.RemoveAll(targetDir); err != nil {
+			return nil, err
+		}
+		return &RemoveResult{Name: needle, Path: targetDir}, nil
+	}
+
+	return nil, fmt.Errorf("plugin %q is not installed", name)
 }
 
 func (r *Registry) installEntry(ctx context.Context, entry RegistryPlugin) (*InstallResult, error) {
