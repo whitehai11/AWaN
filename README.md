@@ -74,6 +74,9 @@ The runtime listens on `localhost:7452` by default and exposes:
 - `POST /memory/store`
 - `GET /agents`
 - `GET /plugins`
+- `GET /plugins/registry`
+- `GET /plugins/search?q=browser`
+- `POST /plugins/install`
 - `GET /files`
 - `POST /tools/execute`
 
@@ -218,6 +221,43 @@ Each plugin must include a `plugin.json` manifest:
 ```
 
 The runtime scans `~/.awan/plugins/`, loads manifests automatically, and executes plugins as isolated subprocesses over JSON stdin/stdout.
+
+### Public Plugin Registry
+
+AWaN can also discover installable plugins from the public registry at:
+
+```text
+https://registry.awan.dev/plugins.json
+```
+
+Registry format:
+
+```json
+{
+  "plugins": [
+    {
+      "name": "browser",
+      "description": "browser automation",
+      "repo": "https://github.com/awan/plugins-browser",
+      "version": "1.0.0"
+    }
+  ]
+}
+```
+
+The registry layer supports:
+
+- `FetchRegistry()`
+- `ListPlugins()`
+- `SearchPlugins()`
+- plugin installation into `~/.awan/plugins/`
+
+Installation flow:
+
+1. fetch the plugin registry
+2. locate the requested plugin
+3. download a plugin archive from the declared repository
+4. extract it into `~/.awan/plugins/`
 
 Example request:
 

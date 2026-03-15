@@ -27,6 +27,9 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("/memory/store", a.handleMemoryStore)
 	mux.HandleFunc("/agents", a.handleAgents)
 	mux.HandleFunc("/plugins", a.handlePlugins)
+	mux.HandleFunc("/plugins/registry", a.handlePluginRegistry)
+	mux.HandleFunc("/plugins/search", a.handlePluginSearch)
+	mux.HandleFunc("/plugins/install", a.handlePluginInstall)
 	mux.HandleFunc("/files", a.handleFiles)
 	mux.HandleFunc("/tools/execute", a.handleToolExecute)
 	mux.HandleFunc("/healthz", a.handleHealth)
@@ -187,6 +190,59 @@ func (a *API) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"plugins": plugins})
+}
+
+func (a *API) handlePluginRegistry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	plugins, err := a.runtime.ListRegistryPlugins()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": plugins})
+}
+
+func (a *API) handlePluginSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	plugins, err := a.runtime.SearchRegistryPlugins(r.URL.Query().Get("q"))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": plugins})
+}
+
+func (a *API) handlePluginInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var request struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := a.runtime.InstallRegistryPlugin(request.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *API) handleToolExecute(w http.ResponseWriter, r *http.Request) {

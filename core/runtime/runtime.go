@@ -27,6 +27,7 @@ type Runtime struct {
 	fs       *filesystem.AgentFS
 	agents   map[string]agent.Definition
 	plugins  *plugins.Runner
+	pluginRegistry *plugins.Registry
 }
 
 // New creates a runtime using the provided configuration.
@@ -73,6 +74,7 @@ func New(cfg *config.Config) (*Runtime, error) {
 		fs:       agentFS,
 		agents:   loadedAgents,
 		plugins:  pluginRunner,
+		pluginRegistry: plugins.NewRegistry(agentFS, ""),
 	}, nil
 }
 
@@ -111,6 +113,11 @@ func (r *Runtime) RegisteredPlugins() map[string]plugins.Definition {
 		return map[string]plugins.Definition{}
 	}
 	return r.plugins.RegisteredPlugins()
+}
+
+// PluginRegistry returns the registry client.
+func (r *Runtime) PluginRegistry() *plugins.Registry {
+	return r.pluginRegistry
 }
 
 // ListFiles returns the lightweight runtime file list.
@@ -198,6 +205,40 @@ func (r *Runtime) ExecuteTool(agentName, toolName string, args map[string]any) (
 	}
 
 	return r.plugins.Execute(nil, definition.Tools, toolName, args)
+}
+
+// ListRegistryPlugins fetches the public registry contents.
+func (r *Runtime) ListRegistryPlugins() ([]plugins.RegistryPlugin, error) {
+	if r.registry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+	return r.pluginRegistry.ListPlugins(nil)
+}
+
+// SearchRegistryPlugins searches the public plugin registry.
+func (r *Runtime) SearchRegistryPlugins(query string) ([]plugins.RegistryPlugin, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+	return r.pluginRegistry.SearchPlugins(nil, query)
+}
+
+// InstallRegistryPlugin downloads and installs a plugin by name.
+func (r *Runtime) InstallRegistryPlugin(name string) (*plugins.InstallResult, error) {
+	if r.pluginRegistry == nil {
+		return nil, errors.New("plugin registry is not available")
+	}
+	result, err := r.pluginRegistry.InstallPlugin(nil, name)
+	if err != nil {
+		return nil, err
+	}
+
+	reloaded, err := plugins.NewRunner(r.fs)
+	if err != nil {
+		return nil, err
+	}
+	r.plugins = reloaded
+	return result, nil
 }
 
 func fallback(value, defaultValue string) string {
